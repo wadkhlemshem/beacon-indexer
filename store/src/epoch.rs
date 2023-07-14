@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use deadpool_postgres::Pool;
-use service::epoch::Epoch;
+use service::model::Epoch;
 use tokio_postgres::Row;
 
 // TODO: Use better types

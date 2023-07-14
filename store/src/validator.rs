@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use deadpool_postgres::Pool;
-use service::validator::Validator;
+use service::model::Validator;
 use tokio_postgres::Row;
 
 use crate::get_client;

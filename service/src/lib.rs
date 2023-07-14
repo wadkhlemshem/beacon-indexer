@@ -1,5 +1,4 @@
-pub mod epoch;
-pub mod validator;
+pub mod model;
 
 use async_trait::async_trait;
 

@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.71"
 async-trait = "0.1.71"
+serde = { version = "1.0.171", features = ["derive"] }
