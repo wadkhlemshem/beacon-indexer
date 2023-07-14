@@ -1,5 +1,5 @@
 [package]
-name = "store"
+name = "service"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,3 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.71"
 async-trait = "0.1.71"
-deadpool-postgres = "0.10.5"
-envconfig = "0.10.0"
-service = { path = "../service" }
-tokio-postgres = "0.7.8"
