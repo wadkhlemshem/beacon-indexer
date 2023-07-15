@@ -16,7 +16,8 @@ pub trait EpochRepository: Sync + Send {
 pub trait ValidatorRepository: Sync + Send {
     async fn get_validator(&self, index: u64) -> Result<Option<Validator>>;
     async fn get_active_validators(&self, epoch: u64) -> Result<Vec<Validator>>;
-    async fn validator_count(&self) -> Result<u64>;
+    async fn active_validator_count(&self, epoch: u64) -> Result<u64>;
+    async fn total_validator_count(&self, epoch: u64) -> Result<u64>;
     async fn create_or_update_validator(&self, validator: &ValidatorDataInput) -> Result<()>;
     async fn create_or_update_validator_batch(&self, validators: &[ValidatorDataInput]) -> Result<()>;
 }
@@ -36,7 +37,8 @@ pub trait Service: Sync + Send {
 
     async fn get_validator(&self, index: u64) -> Result<Option<Validator>>;
     async fn get_active_validators(&self, epoch: u64) -> Result<Vec<Validator>>;
-    async fn validator_count(&self) -> Result<u64>;
+    async fn active_validator_count(&self, epoch: u64) -> Result<u64>;
+    async fn total_validator_count(&self, epoch: u64) -> Result<u64>;
     async fn create_or_update_validator(&self, validator: &ValidatorDataInput) -> Result<()>;
     async fn create_or_update_validator_batch(&self, validators: &[ValidatorDataInput]) -> Result<()>;
 
@@ -86,8 +88,12 @@ impl Service for ServiceImpl {
         self.validator_repository.get_active_validators(epoch).await
     }
 
-    async fn validator_count(&self) -> Result<u64> {
-        self.validator_repository.validator_count().await
+    async fn active_validator_count(&self, epoch: u64) -> Result<u64> {
+        self.validator_repository.active_validator_count(epoch).await
+    }
+
+    async fn total_validator_count(&self, epoch: u64) -> Result<u64> {
+        self.validator_repository.total_validator_count(epoch).await
     }
 
     async fn create_or_update_validator(&self, validator: &ValidatorDataInput) -> Result<()> {

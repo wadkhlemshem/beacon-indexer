@@ -104,9 +104,30 @@ impl ValidatorRepository for PostgresValidatorRepository {
         Ok(validators)
     }
 
-    async fn validator_count(&self) -> Result<u64> {
+    async fn active_validator_count(&self, epoch_index: u64) -> Result<u64> {
         let client = get_client(&self.pool).await?;
-        let row = client.query_one("SELECT COUNT(*) FROM validator", &[]).await?;
+        let row = client
+            .query_one(
+                "SELECT COUNT(*)
+                FROM validator
+                WHERE validator.activation_epoch <= $1 AND validator.exit_epoch > $1",
+                &[&Decimal::from(epoch_index)],
+            )
+            .await?;
+        let count: i64 = row.get(0);
+        Ok(u64::try_from(count)?)
+    }
+
+    async fn total_validator_count(&self, epoch_index: u64) -> Result<u64> {
+        let client = get_client(&self.pool).await?;
+        let row = client
+            .query_one(
+                "SELECT COUNT(*)
+                FROM validator
+                WHERE validator.activation_epoch <= $1",
+                &[&Decimal::from(epoch_index)],
+            )
+            .await?;
         let count: i64 = row.get(0);
         Ok(u64::try_from(count)?)
     }
