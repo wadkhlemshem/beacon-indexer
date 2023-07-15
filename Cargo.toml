@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "api",
+    "common",
+    "client",
     "indexer",
+    "service",
     "store",
 ]

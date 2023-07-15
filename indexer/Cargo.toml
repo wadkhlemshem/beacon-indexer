@@ -6,3 +6,21 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.71"
+async-trait = "0.1.71"
+bit-vec = "0.6.3"
+client = { path = "../client" }
+common = { path = "../common" }
+dotenv = "0.15.0"
+env_logger = "0.10.0"
+envconfig = "0.10.0"
+ethereum-types = "0.14.1"
+hex = "0.4.3"
+log = "0.4.19"
+reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
+serde = { version = "1.0.166", features = ["derive"] }
+serde_json = "1.0.100"
+service = { path = "../service" }
+store = { path = "../store" }
+tokio = { version = "1.29.1", features = ["full"] }
+url = "2.4.0"
