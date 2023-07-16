@@ -8,10 +8,8 @@ use service::{
 };
 use tokio_postgres::Row;
 
-use crate::get_client;
-
 pub struct PostgresValidator {
-    pub index: i64,
+    pub index: u64,
     pub pubkey: String,
     pub attestations: i64,
     pub activation_epoch: u64,
@@ -23,7 +21,10 @@ impl TryFrom<Row> for PostgresValidator {
 
     fn try_from(value: Row) -> Result<Self, Self::Error> {
         Ok(PostgresValidator {
-            index: value.try_get("index")?,
+            index: value
+                .get::<_, Decimal>("index")
+                .to_u64()
+                .ok_or(anyhow!("Invalid validator index"))?,
             pubkey: value.try_get("pubkey")?,
             attestations: value.try_get("attestations")?,
             activation_epoch: value
@@ -43,7 +44,7 @@ impl TryFrom<PostgresValidator> for Validator {
 
     fn try_from(value: PostgresValidator) -> Result<Self, Self::Error> {
         Ok(Validator {
-            index: u64::try_from(value.index)?,
+            index: value.index,
             pubkey: value.pubkey,
             attestations: u64::try_from(value.attestations)?,
             activation_epoch: value.activation_epoch,
@@ -65,20 +66,20 @@ impl PostgresValidatorRepository {
 #[async_trait]
 impl ValidatorRepository for PostgresValidatorRepository {
     async fn create_or_update_validator(&self, validator: &ValidatorDataInput) -> Result<()> {
-        let client = get_client(&self.pool).await?;
+        let client = self.pool.get().await?;
         client
             .execute(
                 "INSERT INTO validator (index, pubkey, activation_epoch, exit_epoch)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (index) DO UPDATE SET pubkey = EXCLUDED.pubkey, activation_epoch = EXCLUDED.activation_epoch, exit_epoch = EXCLUDED.exit_epoch",
-                &[&i64::try_from(validator.index)?, &validator.pubkey, &Decimal::from(validator.activation_epoch), &Decimal::from(validator.exit_epoch)],
+                &[&Decimal::from(validator.index), &validator.pubkey, &Decimal::from(validator.activation_epoch), &Decimal::from(validator.exit_epoch)],
             )
             .await?;
         Ok(())
     }
 
     async fn get_active_validators(&self, epoch_index: u64) -> Result<Vec<Validator>> {
-        let client = get_client(&self.pool).await?;
+        let client = self.pool.get().await?;
         let rows = client
             .query(
                 "SELECT validator.index, validator.pubkey, COALESCE(attestation.attestations, 0) as attestations, validator.activation_epoch, validator.exit_epoch
@@ -105,7 +106,7 @@ impl ValidatorRepository for PostgresValidatorRepository {
     }
 
     async fn active_validator_count(&self, epoch_index: u64) -> Result<u64> {
-        let client = get_client(&self.pool).await?;
+        let client = self.pool.get().await?;
         let row = client
             .query_one(
                 "SELECT COUNT(*)
@@ -119,7 +120,7 @@ impl ValidatorRepository for PostgresValidatorRepository {
     }
 
     async fn total_validator_count(&self, epoch_index: u64) -> Result<u64> {
-        let client = get_client(&self.pool).await?;
+        let client = self.pool.get().await?;
         let row = client
             .query_one(
                 "SELECT COUNT(*)
@@ -133,11 +134,11 @@ impl ValidatorRepository for PostgresValidatorRepository {
     }
 
     async fn create_or_update_validator_batch(&self, batch: &[ValidatorDataInput]) -> Result<()> {
-        let client = get_client(&self.pool).await?;
-        let indices = batch
-            .iter()
-            .map(|data| i64::try_from(data.index))
-            .collect::<Result<Vec<_>, _>>()?;
+        if batch.is_empty() {
+            return Ok(());
+        }
+        let client = self.pool.get().await?;
+        let indices = batch.iter().map(|data| Decimal::from(data.index)).collect::<Vec<_>>();
         let pubkeys = batch.iter().map(|data| &data.pubkey).collect::<Vec<_>>();
         let activation_epochs = batch
             .iter()
@@ -150,7 +151,7 @@ impl ValidatorRepository for PostgresValidatorRepository {
         client
             .execute(
                 "INSERT INTO validator (index, pubkey, activation_epoch, exit_epoch)
-                SELECT * FROM UNNEST($1::BIGINT[], $2::VARCHAR[], $3::NUMERIC(20,0)[], $4::NUMERIC(20,0)[])
+                SELECT * FROM UNNEST($1::NUMERIC(20,0)[], $2::VARCHAR[], $3::NUMERIC(20,0)[], $4::NUMERIC(20,0)[])
                 ON CONFLICT (index) DO UPDATE SET pubkey = EXCLUDED.pubkey, activation_epoch = EXCLUDED.activation_epoch, exit_epoch = EXCLUDED.exit_epoch",
                 &[&indices, &pubkeys, &activation_epochs, &exit_epochs],
             )
@@ -159,7 +160,7 @@ impl ValidatorRepository for PostgresValidatorRepository {
     }
 
     async fn get_validator(&self, index: u64) -> Result<Option<Validator>> {
-        let client = get_client(&self.pool).await?;
+        let client = self.pool.get().await?;
         let row = client
             .query_opt(
                 "SELECT index, pubkey, COALESCE(validator_history.active_epochs, 0) as active_epochs, COALESCE(attestation.attestations, 0) as attestations
@@ -179,7 +180,7 @@ impl ValidatorRepository for PostgresValidatorRepository {
                 ) AS attestation
                 ON validator.index = attestation.validator_index
                 WHERE validator.index = $1",
-                &[&i64::try_from(index)?],
+                &[&Decimal::from(index)],
             )
             .await?;
         row.map(PostgresValidator::try_from)

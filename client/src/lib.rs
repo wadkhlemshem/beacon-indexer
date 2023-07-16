@@ -7,17 +7,21 @@ use common::{
     block::{BlockHeader, BlockId},
     committee::Committee,
     state::StateId,
+    subscription::Subscribable,
     validator::{ValidatorData, ValidatorId, ValidatorStatus},
 };
+use futures_core::Stream;
+use futures_util::StreamExt;
 use model::{block::BlockHeaderResponse, state::StateRootResponse, validator::ValidatorResponse};
+use serde::de::DeserializeOwned;
 use url::Url;
 
 use crate::model::{attestation::AttestationResponse, committee::CommitteeResponse};
 
-mod model;
+pub mod model;
 
 #[async_trait]
-pub trait EthClient {
+pub trait JsonRpcClient: Sync + Send {
     async fn get_header_for_block(&self, block_id: BlockId) -> Result<BlockHeader>;
     async fn get_root_for_block(&self, block_id: BlockId) -> Result<String>;
     async fn get_attestations_for_block(&self, block_id: BlockId) -> Result<Option<Vec<Attestation>>>;
@@ -26,7 +30,7 @@ pub trait EthClient {
         &self,
         state_id: StateId,
         epoch: Option<u64>,
-        index: Option<u64>,
+        index: Option<u8>,
         slot: Option<u64>,
     ) -> Result<Vec<Committee>>;
 
@@ -39,20 +43,37 @@ pub trait EthClient {
     async fn validator_count(&self, state_id: StateId, validator_status: Option<ValidatorStatus>) -> Result<usize>;
 }
 
-pub struct RpcClient {
+pub struct HttpClient {
     http_rpc_url: Url,
     client: Arc<reqwest::Client>,
 }
 
-impl RpcClient {
+impl HttpClient {
     pub fn new(http_rpc_url: Url) -> Self {
         let client = Arc::new(reqwest::Client::new());
         Self { http_rpc_url, client }
     }
+
+    pub async fn subscribe<T: Subscribable + DeserializeOwned>(&self) -> Result<impl Stream<Item = Result<T>>> {
+        let event = T::subscribe_event();
+        let mut url = self.http_rpc_url.join("eth/v1/events")?;
+        url.query_pairs_mut().append_pair("topics", &event.to_string());
+        log::debug!("GET {url}");
+        // Ok(self.client.get(url).send().await?.bytes_stream())
+        let stream = self.client.get(url).send().await?.bytes_stream();
+        let stream = stream.map(|bytes| {
+            let bytes = bytes?;
+            let line = std::str::from_utf8(&bytes)?.lines().collect::<Vec<_>>()[1];
+            let data = serde_json::from_str(&line[6..])?;
+            Ok(data)
+        });
+
+        Ok(stream)
+    }
 }
 
 #[async_trait]
-impl EthClient for RpcClient {
+impl JsonRpcClient for HttpClient {
     async fn get_header_for_block(&self, block_id: BlockId) -> Result<BlockHeader> {
         let url = self.http_rpc_url.join(&format!("eth/v1/beacon/headers/{block_id}"))?;
         log::debug!("GET {url}");
@@ -91,18 +112,6 @@ impl EthClient for RpcClient {
         }
     }
 
-    // async fn get_block(&self, block_id: BlockId) -> Result<serde_json::Value> {
-    //     let url = self
-    //         .http_rpc_url
-    //         .join(&format!("eth/v2/beacon/blocks/{block_id}"))?;
-    //     dbg!(&url);
-    //     let response = self.client.get(url).send().await?;
-    //     response.error_for_status_ref()?;
-    //     let body = response.json::<serde_json::Value>().await?;
-
-    //     Ok(body)
-    // }
-
     async fn get_root_for_state(&self, state_id: StateId) -> Result<String> {
         let url = self
             .http_rpc_url
@@ -119,7 +128,7 @@ impl EthClient for RpcClient {
         &self,
         state_id: StateId,
         epoch: Option<u64>,
-        index: Option<u64>,
+        index: Option<u8>,
         slot: Option<u64>,
     ) -> Result<Vec<Committee>> {
         let mut url = self

@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
-use client::RpcClient;
+use anyhow::Result;
+use client::HttpClient;
+use common::attestation::Attestation;
 use envconfig::Envconfig;
+use futures_util::StreamExt;
 use indexer::Indexer;
-use service::{Service, ServiceImpl};
+use service::ServiceImpl;
 use store::{
-    attestation::PostgresAttestationRepository, epoch::PostgresEpochRepository, validator::PostgresValidatorRepository,
-    DbConfig,
+    attestation::PostgresAttestationRepository, committee::PostgresCommitteeRepository, epoch::PostgresEpochRepository,
+    validator::PostgresValidatorRepository, DbConfig,
 };
 use url::Url;
 
@@ -21,8 +23,9 @@ struct IndexerConfig {
 async fn main() -> Result<()> {
     dotenv::dotenv()?;
     env_logger::init();
+
     let indexer_config = IndexerConfig::init_from_env()?;
-    let client = RpcClient::new(indexer_config.http_rpc_url);
+    let client = HttpClient::new(indexer_config.http_rpc_url.clone());
 
     let db_config = DbConfig::init_from_env()?;
     let db_pool = store::connect(db_config).await;
@@ -30,23 +33,26 @@ async fn main() -> Result<()> {
     let client = Arc::new(client);
     let epoch_repository = Arc::new(PostgresEpochRepository::new(db_pool.clone()));
     let validator_repository = Arc::new(PostgresValidatorRepository::new(db_pool.clone()));
-    let attestation_repository = Arc::new(PostgresAttestationRepository::new(db_pool));
+    let attestation_repository = Arc::new(PostgresAttestationRepository::new(db_pool.clone()));
+    let committee_repository = Arc::new(PostgresCommitteeRepository::new(db_pool.clone()));
     let service = Arc::new(ServiceImpl::new(
         epoch_repository,
         validator_repository,
         attestation_repository,
+        committee_repository,
     ));
     let indexer = Indexer::new(client.clone(), service.clone());
+
     indexer.index_current_validators().await?;
-    let epoch = 214889;
-    indexer.run_for_epoch(epoch).await?;
+    indexer.create_epoch(215410).await?;
+    indexer.index_committees_for_epoch(215410).await?;
 
-    let epoch = service.get_epoch(214889).await?.ok_or(anyhow!("Epoch not found"))?;
-    let attestations_count = epoch.attestations;
-    let active_validator_count = epoch.active_validators;
-    println!("attestations count = {}", attestations_count);
-    let participation_rate = (attestations_count as f64) / (active_validator_count as f64);
-    println!("participation rate = {}", participation_rate);
-
+    let stream = client.subscribe::<Attestation>().await?.boxed();
+    let handle = tokio::spawn(indexer::pubsub::index_attestations(
+        client.clone(),
+        service.clone(),
+        stream,
+    ));
+    handle.await??;
     Ok(())
 }

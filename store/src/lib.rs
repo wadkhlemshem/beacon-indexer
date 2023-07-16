@@ -1,8 +1,9 @@
-use deadpool_postgres::{Client, Config, ManagerConfig, Pool, PoolError, RecyclingMethod, Runtime};
+use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use envconfig::Envconfig;
 use tokio_postgres::NoTls;
 
 pub mod attestation;
+pub mod committee;
 pub mod epoch;
 pub mod validator;
 
@@ -44,8 +45,4 @@ pub async fn connect(db_config: DbConfig) -> Pool {
         recycling_method: RecyclingMethod::Fast,
     });
     cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap()
-}
-
-pub async fn get_client(pool: &Pool) -> Result<Client, PoolError> {
-    pool.get().await
 }

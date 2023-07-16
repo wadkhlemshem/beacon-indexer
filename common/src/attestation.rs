@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::util::deserialize_num;
+use crate::{
+    subscription::{Subscribable, SubscribeEvent},
+    util::deserialize_num,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,4 +31,10 @@ pub struct Checkpoint {
     #[serde(deserialize_with = "deserialize_num")]
     pub epoch: u64,
     pub root: String,
+}
+
+impl Subscribable for Attestation {
+    fn subscribe_event() -> SubscribeEvent {
+        SubscribeEvent::Attestation
+    }
 }

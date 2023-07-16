@@ -1,15 +1,14 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use deadpool_postgres::Pool;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
 use service::{model::Epoch, EpochRepository};
 use tokio_postgres::Row;
 
-// TODO: Use better types
 pub struct PostgresEpoch {
     pub index: u64,
-    pub active_validators: i64,
-    pub total_validators: i64,
+    pub active_validators: u64,
+    pub total_validators: u64,
     pub attestations: i64,
 }
 
@@ -22,8 +21,14 @@ impl TryFrom<Row> for PostgresEpoch {
                 .get::<_, Decimal>("index")
                 .to_u64()
                 .ok_or(anyhow::anyhow!("Invalid epoch index"))?,
-            active_validators: value.try_get("active_validators")?,
-            total_validators: value.try_get("total_validators")?,
+            active_validators: value
+                .get::<_, Decimal>("active_validators")
+                .to_u64()
+                .ok_or(anyhow!("Invalid number of active validators"))?,
+            total_validators: value
+                .get::<_, Decimal>("total_validators")
+                .to_u64()
+                .ok_or(anyhow!("Invalid number of total validators"))?,
             attestations: value.try_get("attestations")?,
         })
     }
@@ -35,8 +40,8 @@ impl TryFrom<PostgresEpoch> for Epoch {
     fn try_from(value: PostgresEpoch) -> Result<Self, Self::Error> {
         Ok(Epoch {
             index: value.index,
-            active_validators: u64::try_from(value.active_validators)?,
-            total_validators: u64::try_from(value.total_validators)?,
+            active_validators: value.active_validators,
+            total_validators: value.total_validators,
             attestations: u64::try_from(value.attestations)?,
         })
     }
@@ -87,8 +92,8 @@ impl EpochRepository for PostgresEpochRepository {
                 ON CONFLICT (index) DO NOTHING",
                 &[
                     &Decimal::from(epoch_index),
-                    &i64::try_from(active_validators)?,
-                    &i64::try_from(total_validators)?,
+                    &Decimal::from(active_validators),
+                    &Decimal::from(total_validators),
                 ],
             )
             .await?;

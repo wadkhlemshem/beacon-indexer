@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use model::{AttestationData, Epoch, Validator, ValidatorDataInput};
+use model::{AttestationData, Committee, Epoch, Validator, ValidatorDataInput};
 
 #[async_trait]
 pub trait EpochRepository: Sync + Send {
@@ -31,6 +31,14 @@ pub trait AttestationRepository: Sync + Send {
 }
 
 #[async_trait]
+pub trait CommitteeRepository: Sync + Send {
+    async fn create_committee(&self, committee: &Committee) -> Result<()>;
+    async fn create_committee_batch(&self, committees: &[Committee]) -> Result<()>;
+    async fn get_committee(&self, slot: u64, index: u8) -> Result<Option<Committee>>;
+    async fn get_committees(&self, inputs: &[(u64, u8)]) -> Result<Vec<Committee>>;
+}
+
+#[async_trait]
 pub trait Service: Sync + Send {
     async fn get_participation_rate_for_epoch(&self, epoch: u64) -> Result<f64>;
     async fn get_participation_rate_for_validator(&self, validator: u64) -> Result<f64>;
@@ -47,6 +55,11 @@ pub trait Service: Sync + Send {
 
     async fn create_or_update_attestation(&self, attestation_data: AttestationData) -> Result<()>;
     async fn create_or_update_attestation_batch(&self, attestation_data: &[AttestationData]) -> Result<()>;
+
+    async fn create_or_update_committee(&self, committee: &Committee) -> Result<()>;
+    async fn create_or_update_committee_batch(&self, committees: &[Committee]) -> Result<()>;
+    async fn get_committee(&self, slot: u64, index: u8) -> Result<Option<Committee>>;
+    async fn get_committees(&self, inputs: &[(u64, u8)]) -> Result<Vec<Committee>>;
 }
 
 #[derive(Clone)]
@@ -54,6 +67,7 @@ pub struct ServiceImpl {
     epoch_repository: Arc<dyn EpochRepository>,
     validator_repository: Arc<dyn ValidatorRepository>,
     attestation_repository: Arc<dyn AttestationRepository>,
+    committee_repository: Arc<dyn CommitteeRepository>,
 }
 
 impl ServiceImpl {
@@ -61,11 +75,13 @@ impl ServiceImpl {
         epoch_repository: Arc<dyn EpochRepository>,
         validator_repository: Arc<dyn ValidatorRepository>,
         attestation_repository: Arc<dyn AttestationRepository>,
+        committee_repository: Arc<dyn CommitteeRepository>,
     ) -> Self {
         Self {
             epoch_repository,
             validator_repository,
             attestation_repository,
+            committee_repository,
         }
     }
 }
@@ -140,5 +156,21 @@ impl Service for ServiceImpl {
             }
         }
         self.attestation_repository.create_attestation_batch(&batch).await
+    }
+
+    async fn create_or_update_committee(&self, committee: &Committee) -> Result<()> {
+        self.committee_repository.create_committee(committee).await
+    }
+
+    async fn create_or_update_committee_batch(&self, committees: &[Committee]) -> Result<()> {
+        self.committee_repository.create_committee_batch(committees).await
+    }
+
+    async fn get_committee(&self, slot: u64, index: u8) -> Result<Option<Committee>> {
+        self.committee_repository.get_committee(slot, index).await
+    }
+
+    async fn get_committees(&self, inputs: &[(u64, u8)]) -> Result<Vec<Committee>> {
+        self.committee_repository.get_committees(inputs).await
     }
 }

@@ -2,17 +2,25 @@
 
 diesel::table! {
     attestation (epoch_index, validator_index) {
-        epoch_index -> Int8,
-        validator_index -> Int8,
-        slot -> Int8,
+        epoch_index -> Numeric,
+        validator_index -> Numeric,
+        slot -> Numeric,
         committee_index -> Int2,
         attested -> Bool,
     }
 }
 
 diesel::table! {
+    committee (slot, index) {
+        slot -> Numeric,
+        index -> Int2,
+        validators -> Array<Nullable<Numeric>>,
+    }
+}
+
+diesel::table! {
     epoch (index) {
-        index -> Int8,
+        index -> Numeric,
         active_validators -> Int8,
         total_validators -> Int8,
     }
@@ -20,27 +28,16 @@ diesel::table! {
 
 diesel::table! {
     validator (index) {
-        index -> Int8,
+        index -> Numeric,
         pubkey -> Varchar,
+        activation_epoch -> Numeric,
+        exit_epoch -> Numeric,
     }
 }
-
-diesel::table! {
-    validator_history (validator_index, epoch_index) {
-        validator_index -> Int8,
-        epoch_index -> Int8,
-        is_active -> Bool,
-    }
-}
-
-diesel::joinable!(attestation -> epoch (epoch_index));
-diesel::joinable!(attestation -> validator (validator_index));
-diesel::joinable!(validator_history -> epoch (epoch_index));
-diesel::joinable!(validator_history -> validator (validator_index));
 
 diesel::allow_tables_to_appear_in_same_query!(
     attestation,
+    committee,
     epoch,
     validator,
-    validator_history,
 );

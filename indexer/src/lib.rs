@@ -1,20 +1,25 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use client::EthClient;
-use common::{block::BlockId, committee::Committee, state::StateId};
+use client::{HttpClient, JsonRpcClient};
+use common::{block::BlockId, state::StateId};
 use service::{
     model::{AttestationData, ValidatorDataInput},
     Service,
 };
 
+use crate::util::get_committee_for_slot_and_index;
+
+pub mod pubsub;
+pub mod util;
+
 pub struct Indexer {
-    pub client: Arc<dyn EthClient>,
+    pub client: Arc<HttpClient>,
     pub service: Arc<dyn Service>,
 }
 
 impl Indexer {
-    pub fn new(client: Arc<dyn EthClient>, service: Arc<dyn Service>) -> Self {
+    pub fn new(client: Arc<HttpClient>, service: Arc<dyn Service>) -> Self {
         Self { client, service }
     }
 
@@ -45,6 +50,36 @@ impl Indexer {
         Ok(())
     }
 
+    pub async fn index_committees_for_epoch(&self, epoch: u64) -> Result<()> {
+        let slot = epoch * 32;
+        let committees = self
+            .client
+            .get_committees_for_state(StateId::Slot(slot), Some(epoch), None, None)
+            .await?;
+        log::info!("Adding committees for epoch {epoch}");
+        let total_committee_count = committees.len();
+        let mut added = 0;
+        for chunk in committees.chunks(1000) {
+            let mut committee_data = Vec::new();
+            for data in chunk {
+                let mut validators = Vec::new();
+                for validator in &data.validators {
+                    validators.push(*validator);
+                }
+                committee_data.push(service::model::Committee {
+                    slot: data.slot,
+                    index: data.index,
+                    validators,
+                });
+            }
+            let service = self.service.clone();
+            service.create_or_update_committee_batch(&committee_data).await?;
+            added += chunk.len();
+            log::info!("Added {added}/{total_committee_count} committees");
+        }
+        Ok(())
+    }
+
     pub async fn create_epoch(&self, epoch: u64) -> Result<()> {
         let active_validator_count = self.service.active_validator_count(epoch).await?;
         let total_validator_count = self.service.total_validator_count(epoch).await?;
@@ -55,19 +90,6 @@ impl Indexer {
         Ok(())
     }
 
-    pub async fn get_committee_map_for_epoch(&self, epoch: u64) -> Result<BTreeMap<(u64, u8), Committee>> {
-        let start_slot = epoch * 32;
-        let committees = self
-            .client
-            .get_committees_for_state(StateId::Slot(start_slot), Some(epoch), None, None)
-            .await?;
-        let mut committee_map = BTreeMap::new();
-        for committee in committees {
-            committee_map.insert((committee.slot, committee.index), committee.clone());
-        }
-        Ok(committee_map)
-    }
-
     pub async fn run_for_epoch(&self, epoch: u64) -> Result<()> {
         log::info!("Processing epoch {epoch}");
         let start_slot = epoch * 32;
@@ -75,11 +97,7 @@ impl Indexer {
         if epoch != 0 {
             self.create_epoch(epoch - 1).await?;
         }
-        let committee_map = self.get_committee_map_for_epoch(epoch).await?;
-        let previous_committee_map = match epoch {
-            0 => BTreeMap::new(),
-            _ => self.get_committee_map_for_epoch(epoch - 1).await?,
-        };
+        self.index_committees_for_epoch(epoch).await?;
         for slot in start_slot..start_slot + 32 {
             log::info!("Processing slot {slot}");
             let attestations = match self.client.get_attestations_for_block(BlockId::Slot(slot)).await? {
@@ -97,16 +115,14 @@ impl Indexer {
                     index,
                     attestation.data.target.epoch
                 );
-                let committee = if attestation.data.target.epoch < epoch {
-                    log::info!("Processing delayed attestation at slot {slot} and index {index}");
-                    previous_committee_map
-                        .get(&(attestation.data.slot, attestation.data.index))
-                        .ok_or(anyhow!("Committee not found"))?
-                } else {
-                    committee_map
-                        .get(&(attestation.data.slot, attestation.data.index))
-                        .ok_or(anyhow!("Committee not found"))?
-                };
+                let committee = get_committee_for_slot_and_index(
+                    self.client.clone(),
+                    self.service.clone(),
+                    attestation.data.slot,
+                    attestation.data.index,
+                )
+                .await?
+                .ok_or(anyhow!("Committee not found"))?;
 
                 let aggregation_bits = attestation.aggregation_bits.clone();
 

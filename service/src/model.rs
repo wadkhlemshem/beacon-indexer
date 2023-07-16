@@ -33,3 +33,20 @@ pub struct AttestationData {
     pub committee_index: u8,
     pub attested: bool,
 }
+
+#[derive(Debug, Clone)]
+pub struct Committee {
+    pub index: u8,
+    pub slot: u64,
+    pub validators: Vec<u64>,
+}
+
+impl From<common::committee::Committee> for Committee {
+    fn from(committee: common::committee::Committee) -> Self {
+        Self {
+            index: committee.index,
+            slot: committee.slot,
+            validators: committee.validators,
+        }
+    }
+}
