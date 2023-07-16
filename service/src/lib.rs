@@ -2,7 +2,7 @@ pub mod model;
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use model::{AttestationData, Committee, Epoch, Validator, ValidatorDataInput};
 
@@ -10,6 +10,7 @@ use model::{AttestationData, Committee, Epoch, Validator, ValidatorDataInput};
 pub trait EpochRepository: Sync + Send {
     async fn get_epoch(&self, index: u64) -> Result<Option<Epoch>>;
     async fn create_epoch(&self, epoch_index: u64, active_validators: u64, total_validators: u64) -> Result<()>;
+    async fn current_epoch(&self) -> Result<u64>;
 }
 
 #[async_trait]
@@ -88,12 +89,31 @@ impl ServiceImpl {
 
 #[async_trait]
 impl Service for ServiceImpl {
-    async fn get_participation_rate_for_epoch(&self, _epoch: u64) -> Result<f64> {
-        todo!()
+    async fn get_participation_rate_for_epoch(&self, epoch: u64) -> Result<f64> {
+        let active_validator_count = self.validator_repository.active_validator_count(epoch).await?;
+        let attestation_count = self
+            .epoch_repository
+            .get_epoch(epoch)
+            .await?
+            .map(|e| e.attestations)
+            .ok_or(anyhow!("Epoch not found"))?;
+        Ok(attestation_count as f64 / active_validator_count as f64)
     }
 
-    async fn get_participation_rate_for_validator(&self, _validator: u64) -> Result<f64> {
-        todo!()
+    async fn get_participation_rate_for_validator(&self, validator: u64) -> Result<f64> {
+        let current_epoch = self.epoch_repository.current_epoch().await?;
+        let validator = self
+            .validator_repository
+            .get_validator(validator)
+            .await?
+            .ok_or(anyhow!("Validator not found"))?;
+        let active_epoch_count = if current_epoch > validator.exit_epoch {
+            validator.exit_epoch - validator.activation_epoch
+        } else {
+            current_epoch - validator.activation_epoch
+        };
+        let attestation_count = validator.attestations;
+        Ok(attestation_count as f64 / active_epoch_count as f64)
     }
 
     async fn get_validator(&self, index: u64) -> Result<Option<Validator>> {

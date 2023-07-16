@@ -99,4 +99,21 @@ impl EpochRepository for PostgresEpochRepository {
             .await?;
         Ok(())
     }
+
+    async fn current_epoch(&self) -> Result<u64> {
+        let client = self.pool.get().await?;
+        let row = client
+            .query_one(
+                "SELECT index FROM epoch
+                ORDER BY index DESC
+                LIMIT 1",
+                &[],
+            )
+            .await?;
+        let index = row
+            .get::<_, Decimal>("index")
+            .to_u64()
+            .ok_or(anyhow!("Invalid epoch index"))?;
+        Ok(index)
+    }
 }
