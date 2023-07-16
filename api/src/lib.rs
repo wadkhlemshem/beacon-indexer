@@ -6,7 +6,7 @@ use async_graphql::{
     Context, EmptyMutation, EmptySubscription, FieldResult, MergedObject, Object, Schema,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use service::Service;
+use service::{Service, ServiceImpl};
 
 #[derive(MergedObject, Default)]
 pub struct Query(AttestationQuery);
@@ -19,12 +19,12 @@ pub type IndexerSchema = Schema<Query, EmptyMutation, EmptySubscription>;
 #[Object]
 impl AttestationQuery {
     async fn participation_rate_for_epoch<'a>(&self, ctx: &'a Context<'_>, epoch: u64) -> FieldResult<f64> {
-        let service = ctx.data::<Arc<dyn Service>>()?;
+        let service = ctx.data::<Arc<ServiceImpl>>()?;
         Ok(service.get_participation_rate_for_epoch(epoch).await?)
     }
 
     async fn participation_rate_for_validator<'a>(&self, ctx: &'a Context<'_>, validator: u64) -> FieldResult<f64> {
-        let service = ctx.data::<Arc<dyn Service>>()?;
+        let service = ctx.data::<Arc<ServiceImpl>>()?;
         Ok(service.get_participation_rate_for_validator(validator).await?)
     }
 }
