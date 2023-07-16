@@ -31,9 +31,17 @@ impl PollingIndexer {
         let finality_checkpoints = self.client.get_finality_checkpoints(StateId::Head).await?;
         self.index_current_validators().await?;
         let current_epoch = finality_checkpoints.current_justified.epoch;
-        let max_epoch = self.max_epoch.unwrap_or(current_epoch);
+        let max_epoch = match self.max_epoch {
+            Some(max) if max > current_epoch => max,
+            _ => current_epoch,
+        };
         for epoch in 0..=max_epoch {
             self.run_for_epoch(epoch).await?;
+        }
+        if self.max_epoch.is_none() {
+            loop {
+                self.run_for_epoch(max_epoch + 1).await?;
+            }
         }
         Ok(())
     }

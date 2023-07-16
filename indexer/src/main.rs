@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use client::{model::attestation::Attestation, HttpClient};
+use client::HttpClient;
 use envconfig::Envconfig;
-use futures_util::StreamExt;
 use indexer::polling::PollingIndexer;
 use service::ServiceImpl;
 use store::{
@@ -50,14 +49,15 @@ async fn main() -> Result<()> {
 
     handle_set.spawn(polling_indexer.run());
 
-    if indexer_config.max_epoch.is_none() {
-        let stream = client.subscribe::<Attestation>().await?.boxed();
-        handle_set.spawn(indexer::pubsub::index_attestations(
-            client.clone(),
-            service.clone(),
-            stream,
-        ));
-    }
+    // Disable pubsub for now because of rate limiting
+    // if indexer_config.max_epoch.is_none() {
+    //     let stream = client.subscribe::<Attestation>().await?.boxed();
+    //     handle_set.spawn(indexer::pubsub::index_attestations(
+    //         client.clone(),
+    //         service.clone(),
+    //         stream,
+    //     ));
+    // }
     while let Some(result) = handle_set.join_next().await {
         result??;
     }
