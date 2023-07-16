@@ -41,8 +41,8 @@ pub struct Committee {
     pub validators: Vec<u64>,
 }
 
-impl From<common::committee::Committee> for Committee {
-    fn from(committee: common::committee::Committee) -> Self {
+impl From<client::model::committee::Committee> for Committee {
+    fn from(committee: client::model::committee::Committee) -> Self {
         Self {
             index: committee.index,
             slot: committee.slot,

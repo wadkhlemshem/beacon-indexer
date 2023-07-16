@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use client::HttpClient;
-use common::attestation::Attestation;
+use client::{model::attestation::Attestation, HttpClient};
 use envconfig::Envconfig;
 use futures_util::StreamExt;
 use indexer::Indexer;

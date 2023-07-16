@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use client::JsonRpcClient;
-use common::attestation::Attestation;
+use client::{model::attestation::Attestation, JsonRpcClient};
 use futures_util::{stream::BoxStream, StreamExt};
 use service::Service;
 

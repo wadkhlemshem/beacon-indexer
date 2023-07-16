@@ -9,6 +9,5 @@ edition = "2021"
 anyhow = "1.0.71"
 async-trait = "0.1.71"
 client = { path = "../client" }
-common = { path = "../common" }
 serde = { version = "1.0.171", features = ["derive"] }
 tokio = { version = "1.29.1", features = ["rt"] }

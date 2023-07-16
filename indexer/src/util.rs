@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use client::JsonRpcClient;
-use common::{attestation::Attestation, state::StateId};
+use client::{
+    model::{attestation::Attestation, state::StateId},
+    JsonRpcClient,
+};
 use service::{model::AttestationData, Service};
 
 pub async fn get_committee_for_slot_and_index(

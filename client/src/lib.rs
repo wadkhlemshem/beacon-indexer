@@ -2,23 +2,24 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use common::{
-    attestation::Attestation,
-    block::{BlockHeader, BlockId},
-    committee::Committee,
-    state::StateId,
-    subscription::Subscribable,
-    validator::{ValidatorData, ValidatorId, ValidatorStatus},
-};
 use futures_core::Stream;
 use futures_util::StreamExt;
-use model::{block::BlockHeaderResponse, state::StateRootResponse, validator::ValidatorResponse};
+use model::{
+    attestation::Attestation,
+    block::{BlockHeader, BlockHeaderResponse, BlockId},
+    committee::Committee,
+    state::{StateId, StateRootResponse},
+    validator::{ValidatorData, ValidatorId, ValidatorResponse, ValidatorStatus},
+};
 use serde::de::DeserializeOwned;
+use subscription::Subscribable;
 use url::Url;
 
 use crate::model::{attestation::AttestationResponse, committee::CommitteeResponse};
 
 pub mod model;
+pub mod subscription;
+pub mod util;
 
 #[async_trait]
 pub trait JsonRpcClient: Sync + Send {

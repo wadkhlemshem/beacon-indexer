@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use client::{HttpClient, JsonRpcClient};
-use common::{block::BlockId, state::StateId};
+use client::{
+    model::{block::BlockId, state::StateId},
+    HttpClient, JsonRpcClient,
+};
 use service::{
     model::{AttestationData, ValidatorDataInput},
     Service,
