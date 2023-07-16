@@ -4,18 +4,21 @@ use anyhow::Result;
 use client::{model::attestation::Attestation, HttpClient};
 use envconfig::Envconfig;
 use futures_util::StreamExt;
-use indexer::Indexer;
+use indexer::polling::PollingIndexer;
 use service::ServiceImpl;
 use store::{
     attestation::PostgresAttestationRepository, committee::PostgresCommitteeRepository, epoch::PostgresEpochRepository,
     validator::PostgresValidatorRepository, DbConfig,
 };
+use tokio::task::JoinSet;
 use url::Url;
 
 #[derive(Debug, Envconfig)]
 struct IndexerConfig {
     #[envconfig(from = "HTTP_RPC_URL")]
     http_rpc_url: Url,
+    #[envconfig(from = "MAX_EPOCH")]
+    max_epoch: Option<u64>,
 }
 
 #[tokio::main]
@@ -40,18 +43,24 @@ async fn main() -> Result<()> {
         attestation_repository,
         committee_repository,
     ));
-    let indexer = Indexer::new(client.clone(), service.clone());
 
-    indexer.index_current_validators().await?;
-    indexer.create_epoch(215410).await?;
-    indexer.index_committees_for_epoch(215410).await?;
+    let mut handle_set = JoinSet::new();
 
-    let stream = client.subscribe::<Attestation>().await?.boxed();
-    let handle = tokio::spawn(indexer::pubsub::index_attestations(
-        client.clone(),
-        service.clone(),
-        stream,
-    ));
-    handle.await??;
+    let polling_indexer = PollingIndexer::new(client.clone(), service.clone(), indexer_config.max_epoch);
+
+    handle_set.spawn(polling_indexer.run());
+
+    if indexer_config.max_epoch.is_none() {
+        let stream = client.subscribe::<Attestation>().await?.boxed();
+        handle_set.spawn(indexer::pubsub::index_attestations(
+            client.clone(),
+            service.clone(),
+            stream,
+        ));
+    }
+    while let Some(result) = handle_set.join_next().await {
+        result??;
+    }
+
     Ok(())
 }
