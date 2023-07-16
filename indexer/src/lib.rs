@@ -12,6 +12,7 @@ use service::{
 
 use crate::util::get_committee_for_slot_and_index;
 
+pub mod polling;
 pub mod pubsub;
 pub mod util;
 

@@ -7,6 +7,7 @@ use futures_util::StreamExt;
 use model::{
     attestation::Attestation,
     block::{BlockHeader, BlockHeaderResponse, BlockId},
+    checkpoint::{FinalityCheckpointResponse, FinalityCheckpoints},
     committee::Committee,
     state::{StateId, StateRootResponse},
     validator::{ValidatorData, ValidatorId, ValidatorResponse, ValidatorStatus},
@@ -42,6 +43,8 @@ pub trait JsonRpcClient: Sync + Send {
         status: Option<ValidatorStatus>,
     ) -> Result<Vec<ValidatorData>>;
     async fn validator_count(&self, state_id: StateId, validator_status: Option<ValidatorStatus>) -> Result<usize>;
+
+    async fn get_finality_checkpoints(&self, state_id: StateId) -> Result<FinalityCheckpoints>;
 }
 
 pub struct HttpClient {
@@ -193,5 +196,17 @@ impl JsonRpcClient for HttpClient {
         let body = response.json::<ValidatorResponse>().await?;
         let active_validator_count = body.data.len();
         Ok(active_validator_count)
+    }
+
+    async fn get_finality_checkpoints(&self, state_id: StateId) -> Result<FinalityCheckpoints> {
+        let url = self
+            .http_rpc_url
+            .join(&format!("eth/v1/beacon/states/{state_id}/finality_checkpoints"))?;
+        log::debug!("GET {url}");
+        let response = self.client.get(url).send().await?;
+        response.error_for_status_ref()?;
+        let body = response.json::<FinalityCheckpointResponse>().await?;
+        let finality_checkpoints = body.data;
+        Ok(finality_checkpoints)
     }
 }

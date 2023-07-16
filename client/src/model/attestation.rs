@@ -5,6 +5,8 @@ use crate::{
     util::deserialize_num,
 };
 
+use super::checkpoint::Checkpoint;
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Attestation {
@@ -23,14 +25,6 @@ pub struct AggregationData {
     pub slot: u64,
     pub source: Checkpoint,
     pub target: Checkpoint,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct Checkpoint {
-    #[serde(deserialize_with = "deserialize_num")]
-    pub epoch: u64,
-    pub root: String,
 }
 
 impl Subscribable for Attestation {
