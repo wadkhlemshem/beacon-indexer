@@ -7,7 +7,7 @@ use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 use envconfig::Envconfig;
 use store::{
     attestation::PostgresAttestationRepository, committee::PostgresCommitteeRepository, epoch::PostgresEpochRepository,
-    validator::PostgresValidatorRepository, DbConfig,
+    proposer::PostgresProposerRepository, validator::PostgresValidatorRepository, DbConfig,
 };
 use url::Url;
 
@@ -43,11 +43,13 @@ async fn main() -> Result<()> {
     let validator_repository = Arc::new(PostgresValidatorRepository::new(db_pool.clone()));
     let attestation_repository = Arc::new(PostgresAttestationRepository::new(db_pool.clone()));
     let committee_repository = Arc::new(PostgresCommitteeRepository::new(db_pool.clone()));
+    let proposer_repository = Arc::new(PostgresProposerRepository::new(db_pool.clone()));
     let service = Arc::new(service::ServiceImpl::new(
         epoch_repository,
         validator_repository,
         attestation_repository,
         committee_repository,
+        proposer_repository,
     ));
 
     let schema = Schema::build(Query::default(), EmptyMutation, EmptySubscription)

@@ -16,7 +16,19 @@ impl PostgresAttestationRepository {
 
 #[async_trait]
 impl AttestationRepository for PostgresAttestationRepository {
-    async fn get_attestation(&self, epoch: u64, validator: u64) -> Result<Option<bool>> {
+    async fn get_attestation_for_slot_and_validator(&self, slot: u64, validator: u64) -> Result<Option<bool>> {
+        let client = self.pool.get().await?;
+        let row = client
+            .query_opt(
+                "SELECT attested FROM attestation
+                WHERE slot = $1 AND validator_index = $2",
+                &[&Decimal::from(slot), &Decimal::from(validator)],
+            )
+            .await?;
+        Ok(row.map(|row| row.get("attested")))
+    }
+
+    async fn get_attestation_for_epoch_and_validator(&self, epoch: u64, validator: u64) -> Result<Option<bool>> {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
@@ -56,6 +68,19 @@ impl AttestationRepository for PostgresAttestationRepository {
             })
             .collect();
         Ok(attestations)
+    }
+
+    async fn attestation_count_for_slot(&self, slot: u64) -> Result<u64> {
+        let client = self.pool.get().await?;
+        let row = client
+            .query_one(
+                "SELECT COUNT(*) FROM attestation
+                WHERE slot = $1",
+                &[&Decimal::from(slot)],
+            )
+            .await?;
+        let count: i64 = row.get(0);
+        Ok(u64::try_from(count)?)
     }
 
     async fn create_attestation(&self, data: AttestationData) -> Result<()> {

@@ -5,6 +5,7 @@ use tokio_postgres::NoTls;
 pub mod attestation;
 pub mod committee;
 pub mod epoch;
+pub mod proposer;
 pub mod validator;
 
 #[derive(Envconfig, Clone)]
