@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use model::{AttestationData, Committee, Epoch, Validator, ValidatorDataInput};
+use model::{AttestationData, Committee, Epoch, Proposer, Validator, ValidatorDataInput};
 
 #[async_trait]
 pub trait EpochRepository: Sync + Send {
@@ -39,11 +39,13 @@ pub trait CommitteeRepository: Sync + Send {
     async fn create_committee_batch(&self, committees: &[Committee]) -> Result<()>;
     async fn get_committee(&self, slot: u64, index: u8) -> Result<Option<Committee>>;
     async fn get_committees(&self, inputs: &[(u64, u8)]) -> Result<Vec<Committee>>;
+    async fn get_committees_for_slot(&self, slot: u64) -> Result<Vec<Committee>>;
 }
 
 #[async_trait]
 pub trait ProposerRepository: Sync + Send {
     async fn create_proposer(&self, slot: u64, validator: u64) -> Result<()>;
+    async fn create_proposers(&self, proposers: &[Proposer]) -> Result<()>;
     async fn get_proposer_for_slot(&self, slot: u64) -> Result<Option<u64>>;
     async fn get_proposers_for_epoch(&self, epoch: u64) -> Result<Vec<u64>>;
 }
@@ -72,6 +74,7 @@ pub trait Service: Sync + Send {
     async fn get_committees(&self, inputs: &[(u64, u8)]) -> Result<Vec<Committee>>;
 
     async fn create_proposer(&self, slot: u64, validator: u64) -> Result<()>;
+    async fn create_proposers(&self, proposers: &[Proposer]) -> Result<()>;
     async fn get_proposer(&self, slot: u64) -> Result<Option<u64>>;
     async fn block_created(&self, slot: u64) -> Result<bool>;
     async fn block_count_for_epoch(&self, epoch: u64) -> Result<u8>;
@@ -113,12 +116,7 @@ impl Service for ServiceImpl {
             .get_epoch(epoch)
             .await?
             .ok_or(anyhow!("Epoch not found"))?;
-        let mut attestation_count = 0;
-        for slot in epoch.index * 32..(epoch.index + 1) * 32 {
-            if self.block_created(slot).await? {
-                attestation_count += self.attestation_repository.attestation_count_for_slot(slot).await?;
-            }
-        }
+        let attestation_count = epoch.attestations;
         Ok(attestation_count as f64 / active_validator_count as f64)
     }
 
@@ -220,24 +218,16 @@ impl Service for ServiceImpl {
         self.proposer_repository.create_proposer(slot, validator).await
     }
 
+    async fn create_proposers(&self, proposers: &[Proposer]) -> Result<()> {
+        self.proposer_repository.create_proposers(proposers).await
+    }
+
     async fn get_proposer(&self, slot: u64) -> Result<Option<u64>> {
         self.proposer_repository.get_proposer_for_slot(slot).await
     }
 
     async fn block_created(&self, slot: u64) -> Result<bool> {
-        match self.proposer_repository.get_proposer_for_slot(slot).await? {
-            Some(validator) => {
-                match self
-                    .attestation_repository
-                    .get_attestation_for_slot_and_validator(slot, validator)
-                    .await?
-                {
-                    Some(true) => Ok(true),
-                    _ => Ok(false),
-                }
-            }
-            None => Ok(false),
-        }
+        Ok(self.proposer_repository.get_proposer_for_slot(slot).await?.is_some())
     }
 
     async fn block_count_for_epoch(&self, epoch: u64) -> Result<u8> {

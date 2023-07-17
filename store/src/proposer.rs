@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use deadpool_postgres::Pool;
+use postgres_types::ToSql;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
-use service::ProposerRepository;
+use service::{model::Proposer, ProposerRepository};
 
 pub struct PostgresProposerRepository {
     pool: Pool,
@@ -26,6 +27,29 @@ impl ProposerRepository for PostgresProposerRepository {
                 &[&Decimal::from(slot), &Decimal::from(validator)],
             )
             .await?;
+        Ok(())
+    }
+
+    async fn create_proposers(&self, proposers: &[Proposer]) -> Result<()> {
+        if proposers.is_empty() {
+            return Ok(());
+        }
+        let client = self.pool.get().await?;
+        let proposers = proposers
+            .iter()
+            .map(|proposer| (Decimal::from(proposer.slot), Decimal::from(proposer.validator_index)))
+            .collect::<Vec<_>>();
+        let mut query = "INSERT INTO proposer (slot, validator_index) VALUES ".to_string();
+        let mut params: Vec<&(dyn ToSql + Sync)> = Vec::new();
+        for (i, proposer) in proposers.iter().enumerate() {
+            query.push_str(&format!("(${}, ${})", i * 2 + 1, i * 2 + 2));
+            params.push(&proposer.0);
+            params.push(&proposer.1);
+            if i < proposers.len() - 1 {
+                query.push_str(", ");
+            }
+        }
+        client.execute(&query, &params).await?;
         Ok(())
     }
 

@@ -95,6 +95,23 @@ impl CommitteeRepository for PostgresCommitteeRepository {
             .collect()
     }
 
+    async fn get_committees_for_slot(&self, slot: u64) -> Result<Vec<Committee>> {
+        let client = self.pool.get().await?;
+        let rows = client
+            .query(
+                "SELECT index, slot, validators FROM committee
+                WHERE slot = $1",
+                &[&Decimal::from(slot)],
+            )
+            .await?;
+        rows.into_iter()
+            .map(PostgresCommittee::try_from)
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .map(Committee::try_from)
+            .collect()
+    }
+
     async fn create_committee(&self, committee: &Committee) -> Result<()> {
         let client = self.pool.get().await?;
         let validators = committee

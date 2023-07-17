@@ -50,3 +50,18 @@ impl From<client::model::committee::Committee> for Committee {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Proposer {
+    pub slot: u64,
+    pub validator_index: u64,
+}
+
+impl From<client::model::proposer::Proposer> for Proposer {
+    fn from(proposer: client::model::proposer::Proposer) -> Self {
+        Self {
+            slot: proposer.slot,
+            validator_index: proposer.validator_index,
+        }
+    }
+}

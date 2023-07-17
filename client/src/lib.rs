@@ -9,6 +9,7 @@ use model::{
     block::{BlockHeader, BlockHeaderResponse, BlockId},
     checkpoint::{FinalityCheckpointResponse, FinalityCheckpoints},
     committee::Committee,
+    proposer::Proposer,
     state::{StateId, StateRootResponse},
     validator::{ValidatorData, ValidatorId, ValidatorResponse, ValidatorStatus},
 };
@@ -16,7 +17,7 @@ use serde::de::DeserializeOwned;
 use subscription::Subscribable;
 use url::Url;
 
-use crate::model::{attestation::AttestationResponse, committee::CommitteeResponse};
+use crate::model::{attestation::AttestationResponse, committee::CommitteeResponse, proposer::ProposerResponse};
 
 pub mod model;
 pub mod subscription;
@@ -24,7 +25,7 @@ pub mod util;
 
 #[async_trait]
 pub trait JsonRpcClient: Sync + Send {
-    async fn get_header_for_block(&self, block_id: BlockId) -> Result<BlockHeader>;
+    async fn get_header_for_block(&self, block_id: BlockId) -> Result<Option<BlockHeader>>;
     async fn get_root_for_block(&self, block_id: BlockId) -> Result<String>;
     async fn get_attestations_for_block(&self, block_id: BlockId) -> Result<Option<Vec<Attestation>>>;
     async fn get_root_for_state(&self, state_id: StateId) -> Result<String>;
@@ -45,6 +46,8 @@ pub trait JsonRpcClient: Sync + Send {
     async fn validator_count(&self, state_id: StateId, validator_status: Option<ValidatorStatus>) -> Result<usize>;
 
     async fn get_finality_checkpoints(&self, state_id: StateId) -> Result<FinalityCheckpoints>;
+
+    async fn get_proposers_for_epoch(&self, epoch: u64) -> Result<Vec<Proposer>>;
 }
 
 pub struct HttpClient {
@@ -78,14 +81,19 @@ impl HttpClient {
 
 #[async_trait]
 impl JsonRpcClient for HttpClient {
-    async fn get_header_for_block(&self, block_id: BlockId) -> Result<BlockHeader> {
+    async fn get_header_for_block(&self, block_id: BlockId) -> Result<Option<BlockHeader>> {
         let url = self.http_rpc_url.join(&format!("eth/v1/beacon/headers/{block_id}"))?;
         log::debug!("GET {url}");
         let response = self.client.get(url).send().await?;
-        response.error_for_status_ref()?;
-        let data = response.json::<BlockHeaderResponse>().await?.data;
-        let header = data.header;
-        Ok(header)
+        match response.error_for_status_ref() {
+            Ok(_) => {
+                let data = response.json::<BlockHeaderResponse>().await?.data;
+                let header = data.header;
+                Ok(Some(header))
+            }
+            Err(err) if err.status().map(|s| s.as_u16()) == Some(404) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     async fn get_root_for_block(&self, block_id: BlockId) -> Result<String> {
@@ -208,5 +216,17 @@ impl JsonRpcClient for HttpClient {
         let body = response.json::<FinalityCheckpointResponse>().await?;
         let finality_checkpoints = body.data;
         Ok(finality_checkpoints)
+    }
+
+    async fn get_proposers_for_epoch(&self, epoch: u64) -> Result<Vec<Proposer>> {
+        let url = self
+            .http_rpc_url
+            .join(&format!("eth/v1/validator/duties/proposer/{epoch}"))?;
+        log::debug!("GET {url}");
+        let response = self.client.get(url).send().await?;
+        response.error_for_status_ref()?;
+        let body = response.json::<ProposerResponse>().await?;
+        let proposers = body.data;
+        Ok(proposers)
     }
 }

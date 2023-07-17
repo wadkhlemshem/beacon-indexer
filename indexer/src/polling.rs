@@ -122,6 +122,12 @@ impl PollingIndexer {
         self.index_committees_for_epoch(epoch).await?;
         for slot in start_slot..start_slot + 32 {
             log::info!("Processing slot {slot}");
+            // Can't use get_proposers_for_epoch because it doesn't return the correct proposer for the genesis slot
+            let header = self.client.get_header_for_block(BlockId::Slot(slot)).await?;
+            if let Some(header) = header {
+                let proposer = header.message.proposer_index;
+                self.service.create_proposer(slot, proposer).await?;
+            }
             let attestations = match self.client.get_attestations_for_block(BlockId::Slot(slot)).await? {
                 Some(attestations) => attestations,
                 None => continue,
