@@ -5,6 +5,11 @@ This project uses `docker` for the database. To run, simply run the following co
 docker compose up
 ```
 
+In your terminal, you can source the `.env` file to set the environment variables. Remember to provide the `HTTP_RPC_URL`
+```shell
+source .env
+```
+
 Then, to run the indexer, run the following command:
 ```shell
 cargo run --bin indexer
