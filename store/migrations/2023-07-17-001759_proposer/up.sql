@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS proposer (
+    slot NUMERIC(20,0) NOT NULL PRIMARY KEY,
+    validator_index NUMERIC(20,0) NOT NULL
+);

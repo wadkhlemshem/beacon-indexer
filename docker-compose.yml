@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./dockerfiles/postgres-init.d:/docker-entrypoint-initdb.d
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8000:8080
+
+  store_migrations:
+    build:
+      dockerfile: Dockerfile
+      context: ./store/
+    volumes:
+      - ./store/migrations:/migrations
+    environment:
+      DATABASE_HOST_PORT: postgres:5432
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/indexer
+    depends_on:
+      - postgres
